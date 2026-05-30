@@ -1,0 +1,27 @@
+# Weather Commodity Trading Strategy
+# Install: pip install -r requirements.txt
+
+# Data
+yfinance>=0.2.40
+openmeteo-requests>=1.3.0
+requests-cache>=1.2.0
+retry-requests>=2.0.0
+requests>=2.31.0
+
+# ML
+xgboost>=2.0.0
+lightgbm>=4.3.0
+scikit-learn>=1.4.0
+scipy>=1.12.0
+
+# Data processing
+pandas>=2.2.0
+numpy>=1.26.0
+
+# Dashboard
+dash>=2.17.0
+dash-bootstrap-components>=1.6.0
+plotly>=5.22.0
+
+# Utils
+pyarrow>=15.0.0
