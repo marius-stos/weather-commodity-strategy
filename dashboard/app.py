@@ -511,7 +511,7 @@ def run_dashboard(df: pd.DataFrame, fold_stats: list, feat_imp: pd.Series):
     register_callbacks(app, df, fold_stats, feat_imp)
     from config import DASH_PORT
     print(f"\n🚀  Dashboard running → http://localhost:{DASH_PORT}")
-    app.run(debug=False, port=DASH_PORT)
+    app.run(debug=False, host="0.0.0.0", port=DASH_PORT)
 
 
 if __name__ == "__main__":
