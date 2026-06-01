@@ -66,7 +66,7 @@ EIA LNG exports             ──┘
 ## Quickstart
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/weather-commodity-strategy
+git clone https://github.com/marius-stos/weather-commodity-strategy
 cd weather-commodity-strategy
 pip install -r requirements.txt
 
