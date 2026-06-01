@@ -108,15 +108,19 @@ def make_layout(df):
         # ── Date range ────────────────────────────────────────────────
         dbc.Row([
             dbc.Col([
+                html.Div(id="date-range-label",
+                         style={"color": "#aaa", "fontSize": "0.85rem",
+                                "marginBottom": "4px", "textAlign": "center"}),
                 dcc.RangeSlider(
                     id="date-range",
                     min=0, max=len(df)-1,
                     value=[0, len(df)-1],
                     marks={
-                        i: str(df.index[i].year)
+                        i: {"label": str(df.index[i].year),
+                            "style": {"color": "#aaa", "fontSize": "0.8rem"}}
                         for i in range(0, len(df), max(1, len(df)//8))
                     },
-                    tooltip={"placement": "bottom"},
+                    tooltip={"always_visible": False},   # hide raw-index tooltip
                 )
             ], width=12)
         ], className="mb-3"),
@@ -141,6 +145,18 @@ def make_layout(df):
 # ── Callbacks ─────────────────────────────────────────────────────────
 
 def register_callbacks(app, df, fold_stats, feat_imp):
+
+    @app.callback(
+        Output("date-range-label", "children"),
+        Input("date-range", "value")
+    )
+    def update_date_label(date_range):
+        i0, i1 = date_range
+        d0 = df.index[i0].strftime("%b %Y")
+        d1 = df.index[i1].strftime("%b %Y")
+        n_days = i1 - i0 + 1
+        n_years = n_days / 252
+        return f"📅  {d0}  →  {d1}  ({n_years:.1f} years)"
 
     @app.callback(
         [Output("kpi-row", "children"),
