@@ -7,12 +7,13 @@ Three-model ensemble optimized for financial time-series with low IC:
   2. XGBoost        — gradient boosting, different bias/variance tradeoff
   3. Ridge           — linear baseline, always stable
 
-Ensemble weights per fold: proportional to in-sample IC (not Sharpe,
-to avoid overfitting to a particular risk profile).
+Ensemble weights per fold: proportional to validation IC.
 
 Walk-forward: 4yr train → 1yr test, rolling annually.
-Target: 10-day forward return (less noise than 5d, more signal per obs).
-Position: z-scored ensemble prediction → vol-targeted size.
+Target: 5-day forward return (weekly horizon — less noise, lower costs).
+
+IC Gate: fold is skipped (position = 0) when weighted val_IC < ML_IC_GATE.
+Weekly rebalancing: position only updated on REBAL_WEEKDAY (default Monday).
 """
 
 import pandas as pd
@@ -26,7 +27,8 @@ from scipy.stats           import spearmanr
 from features.builder  import build_feature_matrix
 from config            import ML_TRAIN_DAYS, ML_TEST_DAYS, ML_VAL_FRAC, \
                               ML_HORIZON, LGBM_PARAMS, XGB_PARAMS, \
-                              VOL_TARGET, TRANSACTION_COST
+                              VOL_TARGET, TRANSACTION_COST, \
+                              ML_IC_GATE, REBAL_WEEKDAY
 
 
 def _target(df: pd.DataFrame, horizon: int = ML_HORIZON) -> pd.Series:
@@ -34,10 +36,13 @@ def _target(df: pd.DataFrame, horizon: int = ML_HORIZON) -> pd.Series:
 
 
 def _ic(pred: np.ndarray, actual: np.ndarray) -> float:
-    mask = ~np.isnan(actual)
+    mask = ~np.isnan(actual) & ~np.isnan(pred)
     if mask.sum() < 10:
         return 0.0
-    return spearmanr(pred[mask], actual[mask]).statistic
+    if np.std(pred[mask]) < 1e-10:   # constant predictions → undefined corr
+        return 0.0
+    ic = spearmanr(pred[mask], actual[mask]).statistic
+    return float(ic) if not np.isnan(ic) else 0.0
 
 
 def _train_lgbm(X_tr, y_tr, X_vl, y_vl):
@@ -54,8 +59,13 @@ def _train_lgbm(X_tr, y_tr, X_vl, y_vl):
 
 
 def _train_xgb(X_tr, y_tr, X_vl, y_vl):
-    model = xgb.XGBRegressor(**XGB_PARAMS)
-    model.fit(X_tr, y_tr, eval_set=[(X_vl, y_vl)], verbose=False)
+    # Remove early stopping: with short (5-day) targets the signal/noise ratio
+    # is low and XGBoost stops after 0 rounds → constant predictions → NaN IC.
+    # Training all rounds avoids trivial models at the cost of some overfitting.
+    params = {k: v for k, v in XGB_PARAMS.items()
+              if k not in ("early_stopping_rounds", "eval_metric")}
+    model = xgb.XGBRegressor(**params)
+    model.fit(X_tr, y_tr, verbose=False)
     return model
 
 
@@ -125,17 +135,26 @@ def run_walkforward(df: pd.DataFrame) -> tuple[pd.DataFrame, list[dict]]:
         total = w_lgbm + w_xgb + w_ridge
         w_lgbm /= total; w_xgb /= total; w_ridge /= total
 
-        ensemble = w_lgbm * p_lgbm + w_xgb * p_xgb + w_ridge * p_ridge
-        oos_ic   = _ic(ensemble, test_raw["y"].values)
+        ensemble   = w_lgbm * p_lgbm + w_xgb * p_xgb + w_ridge * p_ridge
+        oos_ic     = _ic(ensemble, test_raw["y"].values)
+        weighted_val_ic = w_lgbm * ic_lgbm + w_xgb * ic_xgb + w_ridge * ic_ridge
+
+        # IC Gate: only trade if the ensemble had meaningful validation signal
+        use_ml = weighted_val_ic >= ML_IC_GATE
+        gate_str = "▶TRADE" if use_ml else "⬛FLAT "
 
         period = f"{test_raw.index[0].date()} → {test_raw.index[-1].date()}"
         print(f"  Fold {fold:02d} [{period}]  "
               f"w=({w_lgbm:.2f}/{w_xgb:.2f}/{w_ridge:.2f})  "
               f"val_IC=({ic_lgbm:.3f}/{ic_xgb:.3f}/{ic_ridge:.3f})  "
-              f"OOS_IC={oos_ic:.4f}")
+              f"wtd_IC={weighted_val_ic:.3f}  {gate_str}  OOS_IC={oos_ic:.4f}")
 
-        for date, pred in zip(test_raw.index, ensemble):
-            all_preds[date] = pred
+        if use_ml:
+            for date, pred in zip(test_raw.index, ensemble):
+                all_preds[date] = pred
+        else:
+            for date in test_raw.index:
+                all_preds[date] = 0.0   # flat when no edge detected
 
         # Feature importances (lgbm as reference)
         try:
@@ -144,15 +163,17 @@ def run_walkforward(df: pd.DataFrame) -> tuple[pd.DataFrame, list[dict]]:
             fi = {}
 
         fold_stats.append({
-            "fold":      fold,
-            "period":    period,
-            "w_lgbm":    round(w_lgbm, 3),
-            "w_xgb":     round(w_xgb, 3),
-            "w_ridge":   round(w_ridge, 3),
-            "val_ic_lgbm": round(ic_lgbm, 4),
-            "oos_ic":    round(oos_ic, 4),
-            "feat_imp":  fi,
-            "n_train":   len(train_raw),
+            "fold":         fold,
+            "period":       period,
+            "w_lgbm":       round(w_lgbm, 3),
+            "w_xgb":        round(w_xgb, 3),
+            "w_ridge":      round(w_ridge, 3),
+            "val_ic_lgbm":  round(ic_lgbm, 4),
+            "val_ic_wtd":   round(weighted_val_ic, 4),
+            "oos_ic":       round(oos_ic, 4),
+            "used_ml":      use_ml,
+            "feat_imp":     fi,
+            "n_train":      len(train_raw),
         })
 
         start += ML_TEST_DAYS
@@ -180,7 +201,15 @@ def run_walkforward(df: pd.DataFrame) -> tuple[pd.DataFrame, list[dict]]:
     rv = rv.shift(1).clip(lower=0.05)
     out["ml_position_vt"]  = (out["ml_position"] * (VOL_TARGET / rv)).clip(-2, 2)
 
-    # Returns
+    # ── Weekly rebalancing: only update position on REBAL_WEEKDAY ─────
+    rebal_mask = out.index.dayofweek == REBAL_WEEKDAY
+    out["ml_position_vt"] = (
+        out["ml_position_vt"]
+        .where(rebal_mask, other=np.nan)
+        .ffill()
+    )
+
+    # Returns (with weekly turnover → much lower costs)
     out["ml_ret"]         = out["ml_position_vt"] * out["natgas_ret"]
     out["ml_turnover"]    = out["ml_position_vt"].diff().abs()
     out["ml_cost"]        = out["ml_turnover"] * TRANSACTION_COST

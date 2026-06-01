@@ -21,10 +21,11 @@ This strategy captures that signal before it's fully reflected in futures prices
 |---|---|---|---|---|
 | Buy & Hold NG | −0.52% | 62.4% | 0.30 | −83.7% |
 | **Rule-Based + Vol Target** | **+1.03%** | **4.3%** | **0.26** | **−10.5%** |
-| ML Ensemble (LightGBM + XGBoost + Ridge) | −1.61% | 10.6% | −0.10 | −38.8% |
+| ML Ensemble (LightGBM + XGBoost + Ridge) | +0.09% | 8.5% | +0.05 | −30.7% |
 
 *All results are walk-forward validated (4yr train → 1yr test, rolling 11 folds).*  
-*ML shows positive OOS IC in 5/11 folds (avg +0.17 when positive); early folds drag the aggregate — rule-based is the production signal.*
+*ML uses IC gate (wtd val_IC ≥ 0.04) + weekly rebalancing: 4 folds flat (no signal), 7 folds active.*  
+*COVID 2020 and pre-energy-crisis 2021 folds hurt ML (regime breaks); rule-based is the production signal.*
 
 ---
 

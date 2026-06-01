@@ -62,7 +62,9 @@ TRANSACTION_COST = 0.001    # 0.1% per unit position change
 ML_TRAIN_DAYS   = 1008      # 4 years training window
 ML_TEST_DAYS    = 252       # 1 year test window
 ML_VAL_FRAC     = 0.20      # validation fraction within train
-ML_HORIZON      = 10        # forward return horizon (days)
+ML_HORIZON      = 10        # forward return horizon (days) — 2-week target, better S/N
+ML_IC_GATE      = 0.04      # min weighted val_IC to activate ML signal per fold
+REBAL_WEEKDAY   = 0         # rebalance day: 0=Monday, 4=Friday
 
 LGBM_PARAMS = dict(
     n_estimators      = 400,
