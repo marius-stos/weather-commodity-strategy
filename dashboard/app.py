@@ -6,7 +6,8 @@ Open: http://localhost:8050
 
 Tabs:
   1. Overview   — equity curves, KPI table, current signal state
-  2. Signals    — HDD/CDD, satellite wind/solar, ENSO, EIA storage
+  2. Signals    — HDD/CDD, satellite wind/solar, ENSO, EIA storage,
+                  AO/PDO climate regime, EIA Thursday event overlay
   3. ML         — feature importances, IC by fold, ensemble weights
   4. Risk       — drawdowns, rolling Sharpe, position history, vol regime
 """
@@ -37,6 +38,7 @@ def load_results():
 # ── Colour palette ─────────────────────────────────────────────────────
 PAL = {
     "rule":    "#4CAF50",
+    "event":   "#CDDC39",   # lime — EIA Thursday overlay
     "ml":      "#2196F3",
     "bh":      "#FF5722",
     "hdd":     "#FF9800",
@@ -45,6 +47,8 @@ PAL = {
     "solar":   "#FFC107",
     "storage": "#E91E63",
     "enso":    "#00BCD4",
+    "ao":      "#7C4DFF",   # purple — Arctic Oscillation
+    "pdo":     "#FF80AB",   # pink   — PDO
     "bg":      "#1e1e2e",
     "card":    "#2a2a3e",
     "text":    "#e0e0e0",
@@ -203,34 +207,41 @@ def build_tab(tab_id, df, fold_stats, feat_imp):
 # ── Tab 1: Overview ────────────────────────────────────────────────────
 
 def tab_overview(df):
-    eq_rule = (1 + df["rule_ret"].fillna(0)).cumprod()
-    eq_ml   = (1 + df["ml_ret"].fillna(0)).cumprod()
-    eq_bh   = (1 + df["bh_ret"].fillna(0)).cumprod()
+    # Rule + Event combined return
+    event_net = df.get("event_ret_net", pd.Series(0.0, index=df.index)).fillna(0)
+    rule_event_ret = df["rule_ret"].fillna(0) + event_net
+
+    eq_rule       = (1 + df["rule_ret"].fillna(0)).cumprod()
+    eq_rule_event = (1 + rule_event_ret).cumprod()
+    eq_ml         = (1 + df["ml_ret"].fillna(0)).cumprod()
+    eq_bh         = (1 + df["bh_ret"].fillna(0)).cumprod()
 
     fig = go.Figure()
-    for name, eq, col, dash in [
-        ("Rule-Based + VolTarget", eq_rule, PAL["rule"], "solid"),
-        ("ML Ensemble",            eq_ml,   PAL["ml"],   "solid"),
-        ("Buy & Hold NG",          eq_bh,   PAL["bh"],   "dot"),
+    for name, eq, col, dsh, opa in [
+        ("Rule-Based + VolTarget",  eq_rule,       PAL["rule"],  "solid", 1.0),
+        ("Rule + EIA Event",        eq_rule_event, PAL["event"], "dash",  0.85),
+        ("ML Ensemble",             eq_ml,         PAL["ml"],    "solid", 1.0),
+        ("Buy & Hold NG",           eq_bh,         PAL["bh"],    "dot",   0.4),
     ]:
         fig.add_trace(go.Scatter(
             x=eq.index, y=eq.values, name=name,
-            line=dict(color=col, width=2 if "Hold" not in name else 1,
-                      dash=dash),
-            opacity=0.4 if "Hold" in name else 1.0,
+            line=dict(color=col, width=2 if "Hold" not in name else 1, dash=dsh),
+            opacity=opa,
         ))
     fig.add_hline(y=1, line_dash="dash", line_color="gray", opacity=0.5)
     fig.update_layout(**_dark_layout("Equity Curves (starting $1)"))
 
     # Annual returns bar chart
     annual = pd.DataFrame({
-        "Rule":    df["rule_ret"].resample("YE").apply(lambda x: (1+x).prod()-1) * 100,
-        "ML":      df["ml_ret"].resample("YE").apply(lambda x: (1+x).prod()-1) * 100,
-        "BuyHold": df["bh_ret"].resample("YE").apply(lambda x: (1+x).prod()-1) * 100,
+        "Rule":       df["rule_ret"].resample("YE").apply(lambda x: (1+x).prod()-1) * 100,
+        "Rule+Event": rule_event_ret.resample("YE").apply(lambda x: (1+x).prod()-1) * 100,
+        "ML":         df["ml_ret"].resample("YE").apply(lambda x: (1+x).prod()-1) * 100,
+        "BuyHold":    df["bh_ret"].resample("YE").apply(lambda x: (1+x).prod()-1) * 100,
     }).dropna(how="all")
 
     fig2 = go.Figure()
-    for col, color in [("Rule", PAL["rule"]), ("ML", PAL["ml"]), ("BuyHold", PAL["bh"])]:
+    for col, color in [("Rule", PAL["rule"]), ("Rule+Event", PAL["event"]),
+                       ("ML", PAL["ml"]), ("BuyHold", PAL["bh"])]:
         if col in annual:
             fig2.add_trace(go.Bar(
                 x=[str(y.year) for y in annual.index],
@@ -247,10 +258,16 @@ def tab_overview(df):
 
 def _metrics_table(df):
     from backtest.engine import compute_metrics
+    event_net = df.get("event_ret_net", pd.Series(0.0, index=df.index)).fillna(0)
+    rule_event_ret = df["rule_ret"].fillna(0) + event_net
+
     rows = []
-    for label, ret in [("Rule-Based", df["rule_ret"]),
-                       ("ML Ensemble", df["ml_ret"]),
-                       ("Buy & Hold NG", df["bh_ret"])]:
+    for label, ret in [
+        ("Rule-Based + VolTgt",  df["rule_ret"]),
+        ("Rule + EIA Event",     rule_event_ret),
+        ("ML Ensemble",          df["ml_ret"]),
+        ("Buy & Hold NG",        df["bh_ret"]),
+    ]:
         m = compute_metrics(ret.dropna(), label)
         rows.append({
             "Strategy": label,
@@ -270,7 +287,8 @@ def _metrics_table(df):
         style_data={"backgroundColor": PAL["bg"], "color": PAL["text"]},
         style_data_conditional=[
             {"if": {"row_index": 0}, "color": PAL["rule"]},
-            {"if": {"row_index": 1}, "color": PAL["ml"]},
+            {"if": {"row_index": 1}, "color": PAL["event"]},
+            {"if": {"row_index": 2}, "color": PAL["ml"]},
         ],
     )
 
@@ -315,35 +333,101 @@ def tab_signals(df):
 
     # ENSO + Storage
     fig3 = make_subplots(rows=2, cols=1, shared_xaxes=True,
-                          subplot_titles=["ENSO ONI Index", "EIA Storage Surprise"],
+                          subplot_titles=["ENSO ONI Index (La Niña ← → El Niño)",
+                                          "EIA Storage Surprise z-score"],
                           vertical_spacing=0.08)
     if "oni" in df.columns:
         oni = df["oni"]
         fig3.add_trace(go.Scatter(x=df.index, y=oni, name="ONI",
             line=dict(color=PAL["enso"], width=1.2)), row=1, col=1)
-        fig3.add_hrect(y0=0.5,  y1=oni.max()+0.1, fillcolor="red",    opacity=0.05, row=1, col=1)
-        fig3.add_hrect(y0=oni.min()-0.1, y1=-0.5, fillcolor="blue",   opacity=0.05, row=1, col=1)
+        fig3.add_hrect(y0=0.5,  y1=max(oni.max()+0.1, 0.6), fillcolor="red",  opacity=0.05, row=1, col=1)
+        fig3.add_hrect(y0=min(oni.min()-0.1, -0.6), y1=-0.5, fillcolor="blue", opacity=0.05, row=1, col=1)
     if "storage_surprise_z" in df.columns:
         ss = df["storage_surprise_z"]
         fig3.add_trace(go.Bar(x=df.index, y=ss,
             marker_color=[PAL["storage"] if v < 0 else "#888" for v in ss],
             name="Storage surprise z", opacity=0.8), row=2, col=1)
-    fig3.update_layout(**_dark_layout("Macro + Fundamental Signals", height=380))
+    fig3.update_layout(**_dark_layout("ENSO + EIA Storage", height=380))
     figs.append(dcc.Graph(figure=fig3))
+
+    # ── NEW: AO + PDO climate indices ────────────────────────────────
+    fig_ao = make_subplots(rows=2, cols=1, shared_xaxes=True,
+                            subplot_titles=[
+                                "Arctic Oscillation (AO)  —  negative = polar vortex → NG bullish",
+                                "PDO Index  —  negative + La Niña → cold US winters"],
+                            vertical_spacing=0.08)
+    if "ao_index" in df.columns:
+        ao = df["ao_index"]
+        # Shade negative AO regions (polar vortex breakdown)
+        fig_ao.add_hrect(y0=-6, y1=-1.0, fillcolor=PAL["ao"], opacity=0.08,
+                         row=1, col=1)
+        fig_ao.add_trace(go.Scatter(x=df.index, y=ao, name="AO",
+            line=dict(color=PAL["ao"], width=1.2)), row=1, col=1)
+        fig_ao.add_hline(y=-1.0, line_dash="dash", line_color=PAL["ao"],
+                         opacity=0.6, row=1, col=1)
+        fig_ao.add_hline(y=0, line_dash="dot", line_color="gray",
+                         opacity=0.4, row=1, col=1)
+    if "pdo_index" in df.columns:
+        pdo = df["pdo_index"]
+        fig_ao.add_trace(go.Scatter(x=df.index, y=pdo, name="PDO",
+            line=dict(color=PAL["pdo"], width=1.2)), row=2, col=1)
+        fig_ao.add_hline(y=-0.5, line_dash="dash", line_color=PAL["pdo"],
+                         opacity=0.5, row=2, col=1)
+        fig_ao.add_hline(y=0, line_dash="dot", line_color="gray",
+                         opacity=0.4, row=2, col=1)
+        # ENSO ONI overlay on PDO for compound signal visualization
+        if "oni" in df.columns:
+            fig_ao.add_trace(go.Scatter(x=df.index, y=df["oni"],
+                name="ENSO ONI", line=dict(color=PAL["enso"], width=0.8,
+                dash="dot"), opacity=0.6), row=2, col=1)
+    fig_ao.update_layout(**_dark_layout("🌊 Climate Regime: AO + PDO Indices", height=400))
+    figs.append(dcc.Graph(figure=fig_ao))
+
+    # ── NEW: EIA Thursday event overlay ──────────────────────────────
+    fig_ev = make_subplots(rows=2, cols=1, shared_xaxes=True,
+                            subplot_titles=[
+                                "EIA Event Signal (current-week weather z-score)",
+                                "Event Position  [Wed close → Fri close]"],
+                            vertical_spacing=0.08)
+    if "event_signal" in df.columns:
+        es = df["event_signal"]
+        from config import EVENT_THRESHOLD
+        fig_ev.add_trace(go.Scatter(x=df.index, y=es, name="Event signal",
+            line=dict(color=PAL["event"], width=0.8)), row=1, col=1)
+        fig_ev.add_hline(y= EVENT_THRESHOLD, line_dash="dash",
+                         line_color=PAL["event"], opacity=0.6, row=1, col=1)
+        fig_ev.add_hline(y=-EVENT_THRESHOLD, line_dash="dash",
+                         line_color=PAL["event"], opacity=0.6, row=1, col=1)
+        fig_ev.add_hline(y=0, line_dash="dot", line_color="gray",
+                         opacity=0.4, row=1, col=1)
+    if "event_position" in df.columns:
+        ep = df["event_position"]
+        fig_ev.add_trace(go.Bar(x=df.index, y=ep,
+            marker_color=[PAL["event"] if v > 0 else "#F44336" for v in ep],
+            name="Event position", opacity=0.8), row=2, col=1)
+    fig_ev.update_layout(
+        **_dark_layout("📅 EIA Thursday Event Overlay (fires ~35% of Thursdays)", height=380))
+    fig_ev.add_annotation(
+        text="Dashed lines = entry threshold (±1.2σ)",
+        x=0.01, y=0.97, xref="paper", yref="paper",
+        showarrow=False, font=dict(color=PAL["event"], size=10),
+    )
+    figs.append(dcc.Graph(figure=fig_ev))
 
     # Final blended signal + position
     fig4 = make_subplots(rows=2, cols=1, shared_xaxes=True,
-                          subplot_titles=["Blended Signal z-score", "Position"],
+                          subplot_titles=["Blended Signal z-score", "Position (vol-targeted)"],
                           vertical_spacing=0.06)
     if "final_signal" in df.columns:
         fig4.add_trace(go.Scatter(x=df.index, y=df["final_signal"],
             name="Signal", line=dict(color=PAL["rule"], width=1)), row=1, col=1)
+        fig4.add_hline(y=0, line_dash="dot", line_color="gray", opacity=0.4, row=1, col=1)
     if "rule_position" in df.columns:
         pos = df["rule_position"]
         fig4.add_trace(go.Bar(x=df.index, y=pos,
             marker_color=[PAL["rule"] if v > 0 else "#F44336" for v in pos],
             name="Position", opacity=0.8), row=2, col=1)
-    fig4.update_layout(**_dark_layout("Rule-Based Signal and Position", height=350))
+    fig4.update_layout(**_dark_layout("Rule-Based Blended Signal and Position", height=350))
     figs.append(dcc.Graph(figure=fig4))
 
     return html.Div(figs)
@@ -438,6 +522,13 @@ def tab_ml(df, fold_stats, feat_imp):
 
 # ── Tab 4: Risk ────────────────────────────────────────────────────────
 
+def _hex_to_rgba(hex_color: str, alpha: float = 0.12) -> str:
+    """Convert #RRGGBB to rgba(r,g,b,alpha) for Plotly fill colours."""
+    h = hex_color.lstrip("#")
+    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+    return f"rgba({r},{g},{b},{alpha})"
+
+
 def tab_risk(df):
     figs = []
 
@@ -453,7 +544,7 @@ def tab_risk(df):
         fig1.add_trace(go.Scatter(
             x=dd.index, y=dd, name=name,
             line=dict(color=color, width=1.5 if "Hold" not in name else 0.8),
-            fill="tozeroy", fillcolor=color.replace(")", ",0.1)").replace("rgb", "rgba") if color.startswith("rgb") else color+"22",
+            fill="tozeroy", fillcolor=_hex_to_rgba(color, 0.12),
             opacity=0.7 if "Hold" not in name else 0.3,
         ))
     fig1.update_layout(**_dark_layout("Drawdown %", height=320))
@@ -478,7 +569,7 @@ def tab_risk(df):
     fig3.add_trace(go.Scatter(x=rv.index, y=rv,
         name="NG realized vol 20d (ann.)",
         line=dict(color="#FF9800", width=1.2), fill="tozeroy",
-        fillcolor="#FF980022"))
+        fillcolor="rgba(255,152,0,0.13)"))
     fig3.add_hline(y=15, line_dash="dash", line_color=PAL["rule"],
                    annotation_text="Vol target 15%")
     fig3.update_layout(**_dark_layout("Natural Gas Realized Volatility — Vol Targeting Context",
