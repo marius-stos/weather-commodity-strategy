@@ -90,18 +90,23 @@ def main(fast=False, launch_dashboard=False):
     def oos_ret(df, col):
         return df.loc[df.index >= oos, col].dropna()
 
-    bh_ret   = df_rule["natgas_ret"]
+    bh_ret    = df_rule["natgas_ret"]
     rule_ret  = df_rule_vt["strat_ret_vt_net"]
     ml_ret    = df_ml.get("strat_ret_net", rule_ret)
+    # Rule + event overlay: add EIA Thursday event returns on top of vol-targeted rule
+    event_ret = df_rule.get("event_ret_net", pd.Series(0.0, index=df_rule.index))
+    rule_event_ret = rule_ret.add(
+        event_ret.reindex(rule_ret.index).fillna(0), fill_value=0)
 
-    m_bh   = compute_metrics(oos_ret(df_rule, "natgas_ret"),         "Buy & Hold NG")
-    m_rule = compute_metrics(rule_ret.loc[rule_ret.index >= oos].dropna(), "Rule-Based + VolTgt")
-    m_ml   = compute_metrics(ml_ret.loc[ml_ret.index >= oos].dropna(), "ML Ensemble")
+    m_bh         = compute_metrics(oos_ret(df_rule, "natgas_ret"),           "Buy & Hold NG")
+    m_rule       = compute_metrics(rule_ret.loc[rule_ret.index >= oos].dropna(),       "Rule-Based + VolTgt")
+    m_rule_event = compute_metrics(rule_event_ret.loc[rule_event_ret.index >= oos].dropna(), "Rule + EIA Event")
+    m_ml         = compute_metrics(ml_ret.loc[ml_ret.index >= oos].dropna(),           "ML Ensemble")
 
     print("\n" + "="*60)
     print(f"{'Strategy':<25} {'CAGR%':>7} {'Vol%':>7} {'Sharpe':>7} {'MaxDD%':>8} {'Calmar':>7}")
     print("="*60)
-    for m in [m_bh, m_rule, m_ml]:
+    for m in [m_bh, m_rule, m_rule_event, m_ml]:
         print(f"{m['label']:<25} {m['cagr']:>7.2f} {m['vol']:>7.2f} "
               f"{m['sharpe']:>7.3f} {m['max_dd']:>8.2f} {m['calmar']:>7.3f}")
     print("="*60)

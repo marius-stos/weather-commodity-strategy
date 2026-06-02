@@ -47,10 +47,20 @@ TARGET_TICKER = "natgas"
 # ── Signal ────────────────────────────────────────────────────────────
 HDD_BASE_F      = 65.0
 THRESHOLD       = 0.5       # z-score entry threshold (rule-based)
-W_WEATHER       = 0.45      # weight: weather surprise
+W_WEATHER       = 0.35      # weight: HDD/CDD surprise
+W_AO            = 0.10      # weight: Arctic Oscillation (NEW — additive, not multiplier)
 W_STORAGE       = 0.25      # weight: EIA storage surprise
 W_PRODUCTION    = 0.15      # weight: EIA production surprise
 W_SATELLITE     = 0.15      # weight: renewable deficit (wind+solar)
+# Note: W_FORECAST removed — proxy had negative IC; needs real ECMWF archives
+
+# ── Climate regime (AO / PDO) ─────────────────────────────────────────
+AO_THRESHOLD    = -1.0      # AO below this → polar vortex breakdown
+AO_MULT_SCALE   = 0.15      # multiplier scale per unit of negative AO
+
+# ── EIA Thursday event overlay ────────────────────────────────────────
+EVENT_THRESHOLD = 1.2       # min combined signal to activate event trade (~top 20% weeks)
+EVENT_SIZE      = 0.25      # overlay position size (fraction of max position)
 
 # ── Risk ──────────────────────────────────────────────────────────────
 VOL_TARGET      = 0.15      # 15% annual target volatility
