@@ -47,12 +47,17 @@ TARGET_TICKER = "natgas"
 # ── Signal ────────────────────────────────────────────────────────────
 HDD_BASE_F      = 65.0
 THRESHOLD       = 0.5       # z-score entry threshold (rule-based)
-W_WEATHER       = 0.35      # weight: HDD/CDD surprise
-W_AO            = 0.10      # weight: Arctic Oscillation (NEW — additive, not multiplier)
-W_STORAGE       = 0.25      # weight: EIA storage surprise
-W_PRODUCTION    = 0.15      # weight: EIA production surprise
-W_SATELLITE     = 0.15      # weight: renewable deficit (wind+solar)
+#
+# Weight allocation (must sum to 1.0 — satellite gets the residual):
+W_WEATHER        = 0.30     # weight: HDD/CDD seasonal surprise          IC(1d)≈0.022
+W_AO             = 0.10     # weight: Arctic Oscillation (additive)       IC(1d)≈0.019
+W_STORAGE        = 0.20     # weight: EIA storage level z-score           IC(5d)≈0.037
+W_STORAGE_TREND  = 0.05     # weight: 4-week rolling storage z-score      IC(10d)≈0.026
+W_PRODUCTION     = 0.10     # weight: EIA production level (252d z-score) IC(5d)≈0.032
+W_PRODUCTION_ST  = 0.10     # weight: short-term production (21d z-score) IC(5d)≈0.053 ★
+W_SATELLITE      = 0.15     # weight: renewable deficit (satellite, residual, fills to 1.0)
 # Note: W_FORECAST removed — proxy had negative IC; needs real ECMWF archives
+# Note: Price momentum has negative IC for NG (mean-reverting at short horizons)
 
 # ── Climate regime (AO / PDO) ─────────────────────────────────────────
 AO_THRESHOLD    = -1.0      # AO below this → polar vortex breakdown

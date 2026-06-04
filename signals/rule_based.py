@@ -23,8 +23,8 @@ from data.fetch_satellite       import compute_renewable_features
 from data.fetch_ao_pdo          import add_ao_pdo_signal
 from signals.event_signal       import add_eia_event_overlay
 from backtest.vol_target        import apply_vol_targeting
-from config                     import (W_WEATHER, W_AO, W_STORAGE,
-                                        W_PRODUCTION, W_SATELLITE,
+from config                     import (W_WEATHER, W_AO, W_STORAGE, W_STORAGE_TREND,
+                                        W_PRODUCTION, W_PRODUCTION_ST, W_SATELLITE,
                                         THRESHOLD, TRANSACTION_COST)
 
 
@@ -77,14 +77,30 @@ def build_pipeline(weather: pd.DataFrame,
     df["satellite_z"]  = _zscore(df["renewable_deficit_z"].fillna(0))
     ao_z               = df.get("ao_z", pd.Series(0.0, index=df.index)).fillna(0)
 
-    # Weights: W_WEATHER + W_AO + W_STORAGE + W_PRODUCTION + W_SATELLITE = 1.0
-    w_sat = max(0, 1.0 - W_WEATHER - W_AO - W_STORAGE - W_PRODUCTION)
+    # ── NEW: 4-week rolling storage trend ──────────────────────────────
+    # Captures multi-week storage build/draw trajectory (IC(10d)≈0.026, orthogonal to weekly snap)
+    storage_4w = df["storage_signal"].fillna(0).rolling(28, min_periods=7).mean()
+    df["storage_4w_z"] = _zscore(storage_4w)
+
+    # ── NEW: Short-term production z-score (21-day window) ─────────────
+    # Captures recent production changes vs past 3 weeks (IC(5d)≈0.053, best single signal!)
+    # Sign convention: positive = production deficit (bullish NG) — same as production_signal
+    prod = df["production_signal"].fillna(0)
+    mu_21 = prod.rolling(21, min_periods=7).mean()
+    sd_21 = prod.rolling(21, min_periods=7).std().clip(lower=1e-6)
+    df["production_st_z"] = ((prod - mu_21) / sd_21).clip(-3, 3)   # 3σ cap prevents outlier distortion
+
+    # Weights: all components sum to 1.0 (satellite gets residual)
+    w_sat = max(0, 1.0 - W_WEATHER - W_AO - W_STORAGE - W_STORAGE_TREND
+                - W_PRODUCTION - W_PRODUCTION_ST)
     df["blended_z"] = (
-        W_WEATHER    * df["seasonal_signal"].fillna(0) +
-        W_AO         * ao_z +
-        W_STORAGE    * df["storage_z"].fillna(0) +
-        W_PRODUCTION * df["production_z"].fillna(0) +
-        w_sat        * df["satellite_z"].fillna(0)
+        W_WEATHER       * df["seasonal_signal"].fillna(0) +
+        W_AO            * ao_z +
+        W_STORAGE       * df["storage_z"].fillna(0) +
+        W_STORAGE_TREND * df["storage_4w_z"].fillna(0) +
+        W_PRODUCTION    * df["production_z"].fillna(0) +
+        W_PRODUCTION_ST * df["production_st_z"].fillna(0) +
+        w_sat           * df["satellite_z"].fillna(0)
     )
 
     # Macro multiplier: ENSO (regime) × PDO boost (subtle)
