@@ -49,15 +49,22 @@ HDD_BASE_F      = 65.0
 THRESHOLD       = 0.5       # z-score entry threshold (rule-based)
 #
 # Weight allocation (must sum to 1.0 — satellite gets the residual):
-W_WEATHER        = 0.30     # weight: HDD/CDD seasonal surprise          IC(1d)≈0.022
+W_WEATHER        = 0.20     # weight: HDD/CDD seasonal surprise          IC(1d)≈0.022
 W_AO             = 0.10     # weight: Arctic Oscillation (additive)       IC(1d)≈0.019
-W_STORAGE        = 0.20     # weight: EIA storage level z-score           IC(5d)≈0.037
+W_STORAGE        = 0.10     # weight: EIA storage level z-score           IC(5d)≈0.037
 W_STORAGE_TREND  = 0.05     # weight: 4-week rolling storage z-score      IC(10d)≈0.026
 W_PRODUCTION     = 0.10     # weight: EIA production level (252d z-score) IC(5d)≈0.032
 W_PRODUCTION_ST  = 0.10     # weight: short-term production (21d z-score) IC(5d)≈0.053 ★
+W_FUEL_SWITCH    = 0.20     # weight: HO/NG fuel switching z-score        IC(5d)≈0.075 ★★
 W_SATELLITE      = 0.15     # weight: renewable deficit (satellite, residual, fills to 1.0)
 # Note: W_FORECAST removed — proxy had negative IC; needs real ECMWF archives
 # Note: Price momentum has negative IC for NG (mean-reverting at short horizons)
+
+# ── Shoulder-season filter ────────────────────────────────────────────
+# Aug / Sep / Nov historically lose money (-1.7%, -1.9%, -4.5% ann.)
+# Require a 2× stronger signal to enter during these months
+SHOULDER_MONTHS        = [8, 9, 11]   # Aug, Sep, Nov
+SHOULDER_THRESHOLD_MULT = 2.0         # multiply THRESHOLD in shoulder months
 
 # ── Climate regime (AO / PDO) ─────────────────────────────────────────
 AO_THRESHOLD    = -1.0      # AO below this → polar vortex breakdown
