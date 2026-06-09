@@ -298,6 +298,38 @@ def _metrics_table(df):
 def tab_signals(df):
     figs = []
 
+    # ── NEW: HO/NG Fuel Switching Signal (best signal IC=0.075) ──────
+    fig_fs = make_subplots(rows=2, cols=1, shared_xaxes=True,
+                            subplot_titles=[
+                                "⭐ HO/NG Fuel Switching z-score  (IC(5d)=0.075 — best signal)",
+                                "Heating Oil vs Natural Gas — energy-equivalent ratio"],
+                            vertical_spacing=0.08)
+    if "fuel_switch_z" in df.columns:
+        fsz = df["fuel_switch_z"]
+        # Shade positive regions (bullish: HO expensive → switch to gas)
+        fig_fs.add_hrect(y0=0.5, y1=3.5, fillcolor="#CDDC39", opacity=0.06, row=1, col=1)
+        fig_fs.add_trace(go.Scatter(x=df.index, y=fsz, name="Fuel switch z",
+            line=dict(color="#CDDC39", width=1.2)), row=1, col=1)
+        fig_fs.add_hline(y=0, line_dash="dot", line_color="gray", opacity=0.4, row=1, col=1)
+        fig_fs.add_hline(y=1.0, line_dash="dash", line_color="#CDDC39", opacity=0.4, row=1, col=1)
+    if "heat" in df.columns and "natgas" in df.columns:
+        ho_mmbtu = df["heat"] / 0.1395
+        ratio = (ho_mmbtu / df["natgas"].clip(lower=0.01)).dropna()
+        fig_fs.add_trace(go.Scatter(x=ratio.index, y=ratio, name="HO/NG ratio ($/MMBTU)",
+            line=dict(color="#FF9800", width=0.9)), row=2, col=1)
+        if "natgas" in df.columns:
+            fig_fs.add_trace(go.Scatter(x=df.index, y=df["natgas"],
+                name="NG price", line=dict(color="#2196F3", width=0.7,
+                dash="dot"), opacity=0.6), row=2, col=1)
+    fig_fs.update_layout(**_dark_layout(
+        "🔥 HO/NG Fuel Switching — Cross-Market Demand Signal", height=400))
+    fig_fs.add_annotation(
+        text="Positive z = HO expensive vs NG → utility switching to gas → bullish",
+        x=0.01, y=0.98, xref="paper", yref="paper",
+        showarrow=False, font=dict(color="#CDDC39", size=10),
+    )
+    figs.append(dcc.Graph(figure=fig_fs))
+
     # HDD/CDD surprise
     fig1 = make_subplots(rows=2, cols=1, shared_xaxes=True,
                           subplot_titles=["HDD Surprise (cold snap signal)",

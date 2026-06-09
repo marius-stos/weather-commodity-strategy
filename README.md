@@ -20,8 +20,8 @@ This strategy captures that signal before it's fully reflected in futures prices
 | Strategy | CAGR | Vol | Sharpe | Max DD | Calmar |
 |---|---|---|---|---|---|
 | Buy & Hold NG | −0.52% | 62.4% | 0.30 | −83.7% | −0.01 |
-| **Rule-Based + Vol Target** | **+1.27%** | **4.2%** | **0.32** | **−9.8%** | **0.13** |
-| Rule + EIA Event Overlay | +0.25% | 8.5% | 0.07 | −15.6% | 0.02 |
+| **Rule-Based + Vol Target** | **+2.25%** | **3.4%** | **0.67** | **−6.2%** | **0.36** |
+| Rule + EIA Event Overlay | +1.24% | 7.9% | 0.20 | −12.9% | 0.10 |
 | ML Ensemble (LightGBM + XGBoost + Ridge) | −0.10% | 8.6% | 0.03 | −30.5% | −0.003 |
 
 *All results are walk-forward validated (4yr train → 1yr test, rolling 11 folds).*  
@@ -47,13 +47,14 @@ This strategy captures that signal before it's fully reflected in futures prices
 ## Signal Architecture
 
 ```
-Temperature HDD/CDD z-score    W=0.30  IC(1d)≈0.022
-Arctic Oscillation (AO)        W=0.10  IC(1d)≈0.019  (additive, polar vortex)
-EIA Storage level z-score      W=0.20  IC(5d)≈0.037
-EIA Storage 4-week trend z     W=0.05  IC(10d)≈0.026  ← new
-EIA Production 252d z-score    W=0.10  IC(5d)≈0.032
-EIA Production 21d z-score ★  W=0.10  IC(5d)≈0.053  ← new, best signal
-Satellite renewable deficit    W=0.15  (residual)
+Temperature HDD/CDD z-score      W=0.20  IC(1d)≈0.022
+Arctic Oscillation (AO)          W=0.10  IC(1d)≈0.019  (additive, polar vortex)
+EIA Storage level z-score        W=0.10  IC(5d)≈0.037
+EIA Storage 4-week trend z       W=0.05  IC(10d)≈0.026
+EIA Production 252d z-score      W=0.10  IC(5d)≈0.032
+EIA Production 21d z-score ★   W=0.10  IC(5d)≈0.053
+HO/NG fuel switching ratio ★★  W=0.20  IC(5d)≈0.075  ← best signal
+Satellite renewable deficit      W=0.15  (residual)
                                    │
                         × ENSO × PDO multiplier
                                    │
@@ -143,13 +144,13 @@ weather-commodity-strategy/
 
 ## Key Insights
 
-1. **Temperature DELTA > temperature LEVEL**: markets price in absolute cold; the edge is in unexpected cold snaps (HDD rate-of-change, IC ≈ 0.04)
-2. **Volatility targeting is critical**: NG realized vol swings from 20% to 200% (2022). Fixed position sizing destroys risk-adjusted returns; vol targeting cuts max DD from −51% to −9%
-3. **Short-term production z-score (21d) is the best single signal**: IC(5d)=0.053 vs 0.032 for 252-day window (+65%). Captures week-over-week production changes vs recent 3-week trend.
-4. **Satellite wind/solar**: when renewable deficit is high (low wind + clouds), gas demand for power rises — new alpha orthogonal to temperature
-5. **ENSO + AO matters in winter**: La Niña → colder US winters → +20% position scaling; negative AO (polar vortex) adds directional bullish signal (additive, not a multiplier)
-6. **High-vol periods are the BEST periods**: strategy earns +13% CAGR when RV > 2.5× mean (polar vortex events, supply crises). Vol targeting naturally scales position; don't cap it.
-7. **ML needs regime-stable folds**: IC gate + weekly rebalancing rescued ML from −1.6% to −0.1%; COVID 2020 and energy-crisis 2021 are genuine regime breaks that no in-sample IC gate can filter
+1. **Fuel switching is the strongest signal** (IC(5d)=0.075): HO/NG energy-equivalent price ratio. When heating oil is expensive vs gas, utilities and factories switch to gas → demand surge → bullish. Cross-market signal orthogonal to all weather signals.
+2. **Temperature DELTA > temperature LEVEL**: markets price in absolute cold; the edge is in unexpected cold snaps (HDD rate-of-change, IC ≈ 0.04)
+3. **Shoulder months destroy alpha** (Aug/Sep/Nov: −4.5%, −1.9%, −1.7%): shoulder = no heating, no cooling, noisy signals. Doubling the signal threshold in these months eliminates bad trades.
+4. **Short-term production z-score (21d)**: IC(5d)=0.053 vs 0.032 for 252-day. Captures week-over-week production changes vs 3-week trend — the recent EIA surprise.
+5. **Volatility targeting is critical**: NG realized vol swings 20%→200% (2022). Vol targeting cuts max DD from −51% to −6.2%; high-vol periods are the BEST (strategy earns +13% in extreme vol).
+6. **ENSO + AO matters in winter**: La Niña → colder US winters → +20% position scaling; negative AO (polar vortex) is additive bullish signal, not a multiplier.
+7. **ML needs regime-stable folds**: IC gate + weekly rebalancing rescued ML from −1.6% to −0.1%; COVID 2020 and energy-crisis 2021 are genuine regime breaks that no in-sample IC gate can filter.
 
 ---
 
