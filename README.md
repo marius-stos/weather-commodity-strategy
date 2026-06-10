@@ -20,8 +20,8 @@ This strategy captures that signal before it's fully reflected in futures prices
 | Strategy | CAGR | Vol | Sharpe | Max DD | Calmar |
 |---|---|---|---|---|---|
 | Buy & Hold NG | −0.52% | 62.4% | 0.30 | −83.7% | −0.01 |
-| **Rule-Based + Vol Target** | **+2.25%** | **3.4%** | **0.67** | **−6.2%** | **0.36** |
-| Rule + EIA Event Overlay | +1.24% | 7.9% | 0.20 | −12.9% | 0.10 |
+| **Rule-Based + Vol Target** | **+2.12%** | **3.3%** | **0.66** | **−4.9%** | **0.44** |
+| Rule + EIA Event Overlay | +1.11% | 7.9% | 0.18 | −13.1% | 0.09 |
 | ML Ensemble (LightGBM + XGBoost + Ridge) | −0.10% | 8.6% | 0.03 | −30.5% | −0.003 |
 
 *All results are walk-forward validated (4yr train → 1yr test, rolling 11 folds).*  
@@ -53,7 +53,7 @@ EIA Storage level z-score        W=0.10  IC(5d)≈0.037
 EIA Storage 4-week trend z       W=0.05  IC(10d)≈0.026
 EIA Production 252d z-score      W=0.10  IC(5d)≈0.032
 EIA Production 21d z-score ★   W=0.10  IC(5d)≈0.053
-HO/NG fuel switching ratio ★★  W=0.20  IC(5d)≈0.075  ← best signal
+HO/NG fuel switching ratio ★★  W=0.15  IC(5d)≈0.075  ← best signal (capped to avoid overfitting)
 Satellite renewable deficit      W=0.15  (residual)
                                    │
                         × ENSO × PDO multiplier
@@ -151,6 +151,7 @@ weather-commodity-strategy/
 5. **Volatility targeting is critical**: NG realized vol swings 20%→200% (2022). Vol targeting cuts max DD from −51% to −6.2%; high-vol periods are the BEST (strategy earns +13% in extreme vol).
 6. **ENSO + AO matters in winter**: La Niña → colder US winters → +20% position scaling; negative AO (polar vortex) is additive bullish signal, not a multiplier.
 7. **ML needs regime-stable folds**: IC gate + weekly rebalancing rescued ML from −1.6% to −0.1%; COVID 2020 and energy-crisis 2021 are genuine regime breaks that no in-sample IC gate can filter.
+8. **Resisting overfitting is a feature**: backtest CAGR rises monotonically as you load the single best in-sample signal (fuel switching → CAGR climbs toward W=1.0). But sub-period analysis shows that edge is *decaying* (2014–19 IC ≈ 0.20, 2020–25 IC ≈ 0.07). Weight is deliberately capped at 0.15 — the level that maximises risk-adjusted return in **both** halves of the sample, not the level that maximises the headline backtest. Crude/NG (corr 0.92 with HO/NG) was tested and rejected as redundant.
 
 ---
 

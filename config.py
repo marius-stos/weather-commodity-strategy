@@ -49,16 +49,21 @@ HDD_BASE_F      = 65.0
 THRESHOLD       = 0.5       # z-score entry threshold (rule-based)
 #
 # Weight allocation (must sum to 1.0 — satellite gets the residual):
-W_WEATHER        = 0.20     # weight: HDD/CDD seasonal surprise          IC(1d)≈0.022
+W_WEATHER        = 0.22     # weight: HDD/CDD seasonal surprise          IC(1d)≈0.022
 W_AO             = 0.10     # weight: Arctic Oscillation (additive)       IC(1d)≈0.019
-W_STORAGE        = 0.10     # weight: EIA storage level z-score           IC(5d)≈0.037
+W_STORAGE        = 0.11     # weight: EIA storage level z-score           IC(5d)≈0.037
 W_STORAGE_TREND  = 0.05     # weight: 4-week rolling storage z-score      IC(10d)≈0.026
 W_PRODUCTION     = 0.10     # weight: EIA production level (252d z-score) IC(5d)≈0.032
 W_PRODUCTION_ST  = 0.10     # weight: short-term production (21d z-score) IC(5d)≈0.053 ★
-W_FUEL_SWITCH    = 0.20     # weight: HO/NG fuel switching z-score        IC(5d)≈0.075 ★★
-W_SATELLITE      = 0.15     # weight: renewable deficit (satellite, residual, fills to 1.0)
+W_FUEL_SWITCH    = 0.15     # weight: HO/NG fuel switching z-score        IC(5d)≈0.075, IC(20d)≈0.16 ★★
+W_SATELLITE      = 0.17     # weight: renewable deficit (satellite, residual, fills to 1.0)
 # Note: W_FORECAST removed — proxy had negative IC; needs real ECMWF archives
 # Note: Price momentum has negative IC for NG (mean-reverting at short horizons)
+# Note: Crude/NG ratio (corr 0.92 with HO/NG) tested and rejected as redundant.
+# Note: W_FUEL_SWITCH set to 0.15 (not higher). Pushing it up raises in-sample CAGR
+#       monotonically toward W=1.0, but that overfits the strong-but-DECAYING 2014-19
+#       oil-gas edge. In the real pipeline, 0.15 gives the best risk-adjusted result:
+#       higher Sharpe AND shallower drawdown in BOTH 2014-19 and 2020-25 sub-periods.
 
 # ── Shoulder-season filter ────────────────────────────────────────────
 # Aug / Sep / Nov historically lose money (-1.7%, -1.9%, -4.5% ann.)
